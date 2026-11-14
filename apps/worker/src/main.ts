@@ -26,23 +26,44 @@ const worker=new Worker('hris-delivery',async job=>{
   });
  }
 },{connection,concurrency:4});
-worker.on('failed',(job,error)=>console.error(JSON.stringify({event:'delivery_failed',jobId:job?.id,errorType:error.name})));
-worker.on('error',error=>console.error(JSON.stringify({event:'worker_error',errorType:error.name})));
+function errorDetails(error:unknown) {
+ const codes = new Set<string>();
+ function collect(value:unknown, depth:number) {
+  if (!value || typeof value !== 'object' || depth > 3) return;
+  if ('code' in value && typeof value.code === 'string' && /^[A-Z0-9_]{2,32}$/.test(value.code)) codes.add(value.code);
+  if ('errors' in value && Array.isArray(value.errors)) value.errors.forEach(item => collect(item, depth + 1));
+  if ('cause' in value) collect(value.cause, depth + 1);
+  if ('meta' in value) collect(value.meta, depth + 1);
+ }
+ collect(error, 0);
+ return {errorType:error instanceof Error ? error.name : 'unknown', codes:[...codes]};
+}
+worker.on('failed',(job,error)=>console.error(JSON.stringify({event:'delivery_failed',jobType:job?.name,...errorDetails(error)})));
+worker.on('error',error=>console.error(JSON.stringify({event:'worker_error',component:'queue worker',...errorDetails(error)})));
+queue.on('error',error=>console.error(JSON.stringify({event:'queue_error',component:'queue producer',...errorDetails(error)})));
 let stopping=false;
 async function dispatch(){
  if(stopping)return;
+ let stage = 'read pending mail';
  try{
   const mails=await db.authMail.findMany({where:{sentAt:null},take:100,orderBy:{createdAt:'asc'}});
+  stage = 'enqueue mail';
   for(const m of mails)await queue.add('email',{id:m.id},{jobId:`email-${m.id}`});
+  stage = 'list tenants';
   const tenants=await db.tenant.findMany({select:{id:true}});
   for(const tenant of tenants){
+   stage = 'read tenant outbox';
    const rows=await inTenant(tenant.id,tx=>tx.outbox.findMany({where:{deliveredAt:null},take:100,orderBy:{createdAt:'asc'}}));
+   stage = 'enqueue notification';
    for(const row of rows)await queue.add('notification',{id:row.id,tenantId:tenant.id},{jobId:`notification-${row.id}`});
   }
+  stage = 'expire rate limits';
   await db.rateLimit.deleteMany({where:{expiresAt:{lt:new Date()}}});
+  stage = 'expire sessions';
   await db.session.deleteMany({where:{expiresAt:{lt:new Date()}}});
+  stage = 'expire tokens';
   await db.authToken.deleteMany({where:{expiresAt:{lt:new Date()}}});
- }catch(error){console.error(JSON.stringify({event:'dispatch_failed',type:error instanceof Error?error.name:'unknown'}));}
+ }catch(error){console.error(JSON.stringify({event:'dispatch_failed',stage,...errorDetails(error)}));}
  if(!stopping)setTimeout(dispatch,3000);
 }
 async function start(){
