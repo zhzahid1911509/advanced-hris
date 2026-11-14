@@ -18,6 +18,11 @@ model User {
   email String @unique
   name String
   passwordHash String
+  mfaSecret String?
+  pendingSecret String?
+  pendingUntil DateTime?
+  lastTotpStep Int?
+  recoveryHashes String[] @default([])
   verified Boolean @default(false)
   createdAt DateTime @default(now())
   @@map("users")
@@ -33,6 +38,9 @@ model Membership {
   @@map("memberships")
 }
 model Session {
+  handle String @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  agent String @default("")
+  factorAt DateTime?
   id String @id
   userId String @db.Uuid
   csrf String

@@ -1,5 +1,8 @@
 # Security design and limits
 
+These notes cover the v0.1 foundation. See [the v0.2 account security supplement](ACCOUNT-SECURITY.md) for current behavior and verification.
+
+
 Implemented: Argon2id password hashing; high-entropy opaque sessions stored as SHA-256 digests; HttpOnly SameSite=Lax cookies; configurable Secure cookies; strict request Origin checks and session CSRF header; global database-backed rate limits; verified email; expiring hashed one-use reset/invitation tokens; parameterized SQL; strict DTO field allowlists; mandatory tenant membership; RLS; composite tenant FKs; optimistic concurrency; independent approval; sensitive contact masking for auditors; runtime audit/event mutation restrictions.
 
 The rate limiter uses the actual API socket address, not an untrusted forwarded header. With Next's proxy, users share its upstream address and therefore share a conservative bucket (30 auth POSTs/15 minutes; 600 other calls/minute). This is appropriate for a small local evaluation, not high-volume deployment. Production needs a tested trusted-proxy chain, edge per-client limits and account-based failed-login controls. Do not blindly enable `trust proxy=true` or trust arbitrary X-Forwarded-For.

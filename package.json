@@ -1,6 +1,6 @@
 {
   "name": "advanced-hris",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=22.0.0 <25"
@@ -16,7 +16,8 @@
     "build": "npm run db:generate && npm run build -w @hris/api && npm run build -w @hris/worker && npm run build -w @hris/web",
     "typecheck": "npm run typecheck --workspaces",
     "test": "node --import tsx --test tests/*.test.ts",
-    "test:integration": "node --import tsx tests/integration.ts"
+    "test:integration": "node --import tsx tests/integration.ts",
+    "db:check": "node scripts/check-db.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.3",

@@ -1,3 +1,4 @@
+import { requireVerifiedSession } from './account-security';
 import { Body, Controller, Get, Post, Patch, Param, Query, Req, UseGuards, Module, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
@@ -73,7 +74,7 @@ export class PeopleController {
   });
  }
  @Post('employees/:id/invite') async invite(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
-  requireRole(req.context,'ADMIN');uuid.parse(id);const d=z.object({role:z.enum(['HR','EMPLOYEE','AUDITOR'])}).strict().parse(body);
+  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:z.enum(['HR','EMPLOYEE','AUDITOR'])}).strict().parse(body);
   return tenantTx(req.context,async tx=>{
    const e=await ownEmployee(tx,req.context,id);if(e.userId)throw new ConflictException('Employee already has an account.');
    const raw=token();await tx.authToken.deleteMany({where:{tenantId:req.context.tenantId,employeeId:id,kind:'INVITE'}});
@@ -126,7 +127,7 @@ export class PeopleController {
   return ms.map(m=>({...m,user:users.find(u=>u.id===m.userId)}));
  });}
  @Patch('members/:id') async changeMember(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
-  requireRole(req.context,'ADMIN');uuid.parse(id);const d=z.object({role:z.enum(['HR','EMPLOYEE','AUDITOR']),active:z.boolean()}).strict().parse(body);
+  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:z.enum(['HR','EMPLOYEE','AUDITOR']),active:z.boolean()}).strict().parse(body);
   return tenantTx(req.context,async tx=>{
    const m=await tx.membership.findFirst({where:{id,tenantId:req.context.tenantId}});if(!m)throw new NotFoundException();
    if(m.role==='ADMIN' || m.userId===req.userId)throw new BadRequestException('Administrator and self-access changes are not supported.');

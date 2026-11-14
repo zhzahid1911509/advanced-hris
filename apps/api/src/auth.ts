@@ -1,3 +1,4 @@
+import { lockedUser, reserveAttempt, verifyFactor } from './account-security';
 import { Body, Controller, Post, Get, Req, Res, UseGuards, ConflictException, BadRequestException, UnauthorizedException, ForbiddenException, Module } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -53,19 +54,31 @@ export class AuthController {
  }
  @Post('login')
  async login(@Body() body:unknown,@Req() req:AuthRequest,@Res({passthrough:true}) res:Response){
-  const d=z.object({email,password:z.string().min(1).max(128)}).parse(body);
-  const u=await db.user.findUnique({where:{email:d.email}});
-  // Perform a real hash verification even for an unknown email to reduce timing differences.
-  const fallback='$argon2id$v=19$m=19456,t=2,p=1$c29tZXJhbmRvbXNhbHQxMg$7VViVkFHNa/H9Wj+UqKK3WutxAZpETwYszY8Kxr1mxY';
-  const valid=await argon2.verify(u?.passwordHash || fallback,d.password).catch(()=>false);
-  if(!u || !valid) throw new UnauthorizedException('Email or password is incorrect.');
-  if(!u.verified) throw new ForbiddenException('Verify your email before signing in.');
-  const raw=token();const csrf=token();
-  // Rotate the presented session, including when switching accounts.
-  if(typeof req.cookies?.hris_session==='string')await db.session.deleteMany({where:{id:hash(req.cookies.hris_session)}});
-  const s=await db.session.create({data:{id:hash(raw),userId:u.id,csrf,expiresAt:expiry(12)}});
-  res.cookie('hris_session',raw,{...cookie,maxAge:12*3600000});
-  return {csrf:s.csrf,user:{id:u.id,name:u.name,email:u.email}};
+  const input = z.object({email,password:z.string().min(1).max(128),code:z.string().trim().max(48).optional()}).parse(body);
+  const attempt = await reserveAttempt(input.email);
+  const account = await db.user.findUnique({where:{email:input.email}});
+  const dummy = '$argon2id$v=19$m=19456,t=2,p=1$c29tZXJhbmRvbXNhbHQxMg$7VViVkFHNa/H9Wj+UqKK3WutxAZpETwYszY8Kxr1mxY';
+  const valid = await argon2.verify(account?.passwordHash || dummy,input.password).catch(()=>false);
+  if (!account || !valid) throw new UnauthorizedException('Email or password is incorrect.');
+  if (!account.verified) throw new ForbiddenException('Verify your email before signing in.');
+  const raw = token();
+  const result = await db.$transaction(async tx=>{
+    const user = await lockedUser(tx,account.id);
+    if (user.passwordHash !== account.passwordHash) throw new UnauthorizedException('Sign in again with your current password.');
+    if (user.mfaSecret && !input.code) return {requiresMfa:true} as const;
+    if (user.mfaSecret) await verifyFactor(tx,user,input.code!);
+    if (typeof req.cookies?.hris_session==='string') {
+      await tx.session.deleteMany({where:{id:hash(req.cookies.hris_session)}});
+    }
+    const session = await tx.session.create({data:{
+      id:hash(raw),userId:user.id,csrf:token(),expiresAt:expiry(12),
+      agent:(req.get('user-agent') || '').slice(0,240),factorAt:user.mfaSecret?new Date():null
+    }});
+    await tx.rateLimit.deleteMany({where:{id:attempt}});
+    return {csrf:session.csrf,user:{id:user.id,name:user.name,email:user.email}};
+  });
+  if (!('requiresMfa' in result)) res.cookie('hris_session',raw,{...cookie,maxAge:12*3600000});
+  return result;
  }
  @Get('me') @UseGuards(SessionGuard)
  async me(@Req() req:AuthRequest){

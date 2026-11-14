@@ -27,7 +27,7 @@ npm ci
 npm run setup
 ```
 
-`npm ci` installs the lockfile versions. `setup` generates `.env` in the root with random local PostgreSQL owner/runtime passwords. It does not overwrite an existing `.env`. Keep the file private. The `.env.example` documents the variables but contains placeholders.
+`npm ci` installs the lockfile versions. `setup` generates `.env` in the root with random local PostgreSQL owner/runtime passwords. For an existing .env, setup preserves configured values and adds a missing MFA_ENCRYPTION_KEY. Keep that key with database backups. Keep the file private. The `.env.example` documents the variables but contains placeholders.
 
 Default host development connections:
 
@@ -62,6 +62,7 @@ Postgres should become healthy. Redis and Mailpit should be running. This base c
 ```sh
 npm run db:generate
 npm run db:migrate
+npm run db:check
 ```
 
 The migration command provisions the restricted `hris_app` role, applies migrations using owner credentials, grants runtime privileges and revokes audit/event update/delete privileges. The API refuses superuser/BYPASSRLS credentials. Never solve a runtime connection problem by changing DATABASE_URL to postgres.

@@ -1,8 +1,8 @@
-# Next implementation — proposed v0.2.0
+# Remaining foundation roadmap after v0.2.0
 
 Finish the remaining foundation before attendance/payroll:
 
-1. MFA enrollment/recovery and privileged-action enforcement; account-based login protection and session/device management.
+1. Delivered in v0.2.0 — see [account security](ACCOUNT-SECURITY.md). The next planned implementation is scoped permissions and role templates.
 2. Full role templates and scoped/field permissions with a tested permission matrix.
 3. Private document storage, quarantine/scanning states, authorized download and expiry metadata.
 4. Versioned approval runtime and employee change workflows using it.

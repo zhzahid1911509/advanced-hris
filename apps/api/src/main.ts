@@ -12,6 +12,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { db } from './db';
 import { origin } from './config';
 import { hash } from './security';
+import { AccountModule } from './account-security';
 import { AuthModule } from './auth';
 import { PeopleModule } from './people';
 @Catch()
@@ -32,9 +33,9 @@ class Errors implements ExceptionFilter {
  }
 }
 @Controller('health') class HealthController {
- @Get() async health(){await db.$queryRaw`SELECT 1`;return {status:'ok',version:'0.1.0'};}
+ @Get() async health(){await db.$queryRaw`SELECT 1`;return {status:'ok',version:'0.2.0'};}
 }
-@Module({imports:[AuthModule,PeopleModule],controllers:[HealthController]}) class AppModule {}
+@Module({imports:[AuthModule,PeopleModule,AccountModule],controllers:[HealthController]}) class AppModule {}
 async function main(){
  const app=await NestFactory.create(AppModule,{logger:['error','warn','log']});
  app.setGlobalPrefix('api/v1');
@@ -55,7 +56,7 @@ async function main(){
   }catch{res.status(503).json({message:'Service temporarily unavailable.',requestId});}
  });
  app.useGlobalFilters(new Errors());
- const swagger=SwaggerModule.createDocument(app,new DocumentBuilder().setTitle('Advanced HRIS API').setVersion('0.1.0').addCookieAuth('hris_session').addApiKey({type:'apiKey',in:'header',name:'x-tenant-id'},'tenant').build());
+ const swagger=SwaggerModule.createDocument(app,new DocumentBuilder().setTitle('Advanced HRIS API').setVersion('0.2.0').addCookieAuth('hris_session').addApiKey({type:'apiKey',in:'header',name:'x-tenant-id'},'tenant').build());
  SwaggerModule.setup('api/docs',app,swagger);
  const role=await db.$queryRaw<Array<{rolsuper:boolean;rolbypassrls:boolean}>>`SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user`;
  if(role[0]?.rolsuper || role[0]?.rolbypassrls)throw new Error('Refusing to run API with privileged database credentials. Use hris_app.');

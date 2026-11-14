@@ -1,5 +1,8 @@
 # API reference — v0.1.0
 
+These notes cover the v0.1 foundation. See [the v0.2 account security supplement](ACCOUNT-SECURITY.md) for current behavior and verification.
+
+
 Base path `/api/v1`. OpenAPI route explorer at `/api/docs`; this file supplies request/response shapes where the explorer's generated schemas are minimal. Errors return `{statusCode, message, requestId}` except middleware errors, which return message/requestId. Mutations use JSON and an Origin exactly matching APP_ORIGIN. Authenticated mutations additionally use `x-csrf-token`. Scoped endpoints also require `x-tenant-id` from the authenticated `/auth/me` response. Sessions use the `hris_session` cookie.
 
 | Method / path | Body / query | Result / access |

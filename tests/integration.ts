@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import pg from 'pg';
-import { randomUUID } from 'node:crypto';
+import { totp } from '../apps/api/src/factor';
+import { randomBytes, randomUUID } from 'node:crypto';
 const owner=new pg.Client({connectionString:process.env.MIGRATION_DATABASE_URL});
 const runtime=new pg.Client({connectionString:process.env.DATABASE_URL});
 const origin='http://localhost:3000';
@@ -21,7 +22,8 @@ async function login(email:string,password:string){const l=await request('auth/l
 async function main(){
  if(!process.env.MIGRATION_DATABASE_URL || !process.env.DATABASE_URL)throw new Error('Set migration and runtime database URLs. Run against a dedicated test database.');
  await owner.connect();await runtime.connect();
- const servers=[4101,4102].map(port=>spawn(process.execPath,['apps/api/dist/main.js'],{env:{...process.env,API_PORT:String(port),APP_ORIGIN:origin,REGISTRATION_ENABLED:'true',NODE_ENV:'test'},stdio:['ignore','pipe','pipe']}));
+ const testKey=randomBytes(32).toString('hex');
+ const servers=[4101,4102].map(port=>spawn(process.execPath,['apps/api/dist/main.js'],{env:{...process.env,API_PORT:String(port),MFA_ENCRYPTION_KEY:testKey,APP_ORIGIN:origin,REGISTRATION_ENABLED:'true',NODE_ENV:'test'},stdio:['ignore','pipe','pipe']}));
  for(const p of servers)p.stderr.on('data',d=>process.stderr.write(d));
  const prefix=randomUUID().slice(0,8);const password='Testing-HRIS-long-password!';
  try{
@@ -50,6 +52,34 @@ async function main(){
   res=await request('employees','POST',employee,a);check('duplicate employee identifiers rejected',()=>assert.equal(res.status,409));
   const updated=await request('employees/'+id,'PATCH',{...employee,title:'Senior Engineer',version:1,reason:'Role updated for test'},a);assert.equal(updated.status,200);
   res=await request('employees/'+id,'PATCH',{...employee,version:1,reason:'Stale update attempt'},a);check('optimistic version prevents stale overwrite',()=>assert.equal(res.status,409));
+  res=await request('employees/'+id+'/invite','POST',{role:'EMPLOYEE'},a);
+  check('privileged invitation requires a verified factor',()=>assert.equal(res.status,403));
+  const oldSession = await login(aEmail,password);
+  const setup = await request('account/enroll','POST',{password},a);
+  assert.equal(setup.status,201);
+  const bits = [...String(setup.json.manualKey)].map(c=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(c).toString(2).padStart(5,'0')).join('');
+  const seed = Buffer.from(bits.match(/.{8}/g)!.map(byte=>parseInt(byte,2)));
+  const enrollmentCode = totp(seed,Math.floor(Date.now()/30000));
+  const confirmation = await request('account/confirm','POST',{code:enrollmentCode},a);
+  check('enrollment issues eight distinct recovery codes',()=>assert.equal(new Set(confirmation.json.recoveryCodes).size,8));
+  res=await request('auth/me','GET',undefined,oldSession);
+  check('enrollment revokes previous sessions',()=>assert.equal(res.status,401));
+  const challenge=await request('auth/login','POST',{email:aEmail,password});
+  check('password alone yields challenge without session',()=>{assert.ok(challenge.json.requiresMfa);assert.equal(challenge.cookie,'');});
+  res=await request('auth/login','POST',{email:aEmail,password,code:enrollmentCode});
+  check('accepted authenticator timestep cannot be replayed',()=>assert.equal(res.status,401));
+  const recovery=confirmation.json.recoveryCodes[0];
+  const race=await Promise.all([base,second].map(api=>request('auth/login','POST',{email:aEmail,password,code:recovery},undefined,api)));
+  check('parallel recovery code redemption creates one session',()=>assert.deepEqual(race.map(r=>r.status).sort(),[201,401]));
+  const other=race.find(r=>r.cookie)!;
+  const status=await request('account/security','GET',undefined,a);
+  check('session list exposes a revocation handle, with seven codes remaining',()=>{assert.equal(status.json.recoveryRemaining,7);assert.equal(status.json.sessions.length,2);assert.equal(status.json.sessions[0].csrf,undefined);});
+  const handle=status.json.sessions.find((s:any)=>!s.current).handle;
+  res=await request('account/sessions/'+handle+'/revoke','POST',{},b);
+  check('another account cannot revoke the session',()=>assert.equal(res.status,404));
+  await request('account/sessions/'+handle+'/revoke','POST',{},a);
+  res=await request('auth/me','GET',undefined,{...a,cookie:other.cookie});
+  check('revoked device loses access',()=>assert.equal(res.status,401));
   res=await request('employees/'+id+'/invite','POST',{role:'EMPLOYEE'},a);assert.equal(res.status,201);
   const invite=await getToken(employee.email,'invite');res=await request('auth/accept-invite','POST',{token:invite,name:employee.name,password});assert.equal(res.status,201,JSON.stringify(res.json));
   const employeeSession=await login(employee.email,password);
@@ -89,6 +119,18 @@ async function main(){
   res=await request('auth/reset-password','POST',{token:reset,password:password+'new'});assert.equal(res.status,201);
   res=await request('auth/me','GET',undefined,b);check('password reset revokes existing sessions',()=>assert.equal(res.status,401));
   res=await request('auth/reset-password','POST',{token:reset,password:password+'new'});check('reset token cannot be replayed',()=>assert.equal(res.status,400));
+  const disabled=await request('account/disable','POST',{password,code:confirmation.json.recoveryCodes[1]},a);
+  check('owner can disable MFA using password and unused recovery code',()=>assert.equal(disabled.status,201));
+  res=await request('members/'+membership.rows[0].id,'PATCH',{role:'EMPLOYEE',active:true},a);
+  check('disabling authenticator removes privileged session assurance',()=>assert.equal(res.status,403));
+  // Isolate the account limiter from the separate shared IP limit during this test.
+  await owner.query('DELETE FROM rate_limits');
+  for(let i=0;i<10;i++) {
+    const rejected=await request('auth/login','POST',{email:bEmail,password:'incorrect password'});
+    assert.equal(rejected.status,401);
+  }
+  const limited=await request('auth/login','POST',{email:bEmail,password:password+'new'},undefined,second);
+  check('account attempt budget is shared between API processes',()=>assert.equal(limited.status,429));
   await request('auth/logout','POST',{},a);res=await request('auth/me','GET',undefined,a);check('logout invalidates session server-side',()=>assert.equal(res.status,401));
   console.log(`\n${checks} integration assertions passed against two API processes and PostgreSQL.`);
  }finally{

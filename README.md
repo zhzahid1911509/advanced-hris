@@ -1,8 +1,8 @@
-# Advanced HRIS · v0.1.0
+# Advanced HRIS · v0.2.0
 
 A working foundation release for the Bangladesh-focused Advanced HRIS project. Next.js web app, NestJS API, PostgreSQL/Prisma and Redis/BullMQ worker. Source code, migrations, tests and documentation are included. There are no default accounts or mock production records.
 
-**This is the first implementation increment, not the completed enterprise HRIS or all of Phase 2.** See [feature status](docs/FEATURE-IMPLEMENTATION.md) for implemented features and explicit deferrals. The original [architecture plan](docs/ARCHITECTURE-PLAN.md) remains the long-term roadmap.
+This cumulative release adds [account security](docs/ACCOUNT-SECURITY.md) to the [v0.1 foundation](docs/FEATURE-IMPLEMENTATION.md). See the [remaining implementation plan](docs/NEXT-IMPLEMENTATION.md).
 
 ## Quick start — Windows, macOS and Linux
 
@@ -14,6 +14,7 @@ npm run setup
 docker compose up -d
 npm run db:generate
 npm run db:migrate
+npm run db:check
 npm run dev
 ```
 
@@ -26,7 +27,7 @@ Open:
 - API health: http://localhost:4000/api/v1/health
 - API explorer: http://localhost:4000/api/docs
 
-Create a workspace in the application. Open its verification email in Mailpit, follow the link and press **Verify email**. Sign in. Add branches/departments, then employees. An administrator can invite an employee from their profile. Use a different browser/private window to accept the invitation and try employee self-service.
+Create a workspace in the application. Open its verification email in Mailpit, follow the link and press **Verify email**. Sign in. Add branches/departments, then employees. After enabling an authenticator in Account security, an administrator can invite an employee from their profile. Use a different browser/private window to accept the invitation and try employee self-service.
 
 Mailpit is a local email catcher; it does not send email to real inboxes. The worker must be running for verification and invitations to arrive. `npm run dev` starts the web app, API and worker together; Ctrl+C stops all three.
 

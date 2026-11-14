@@ -1,6 +1,6 @@
 # Local all-container alternative. Merge with compose.yaml; not a hardened production deployment.
 x-app: &app
-  image: advanced-hris:0.1.0
+  image: advanced-hris:0.2.0
   build:
     context: .
     args:
@@ -28,6 +28,9 @@ services:
         condition: service_healthy
   api:
     <<: *app
+    environment:
+      <<: *env
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Run npm run setup}
     command: ["npm", "run", "start", "-w", "@hris/api"]
     ports: ["127.0.0.1:4000:4000"]
     depends_on:

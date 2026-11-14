@@ -1,5 +1,8 @@
 # Verification report — v0.1.0
 
+These notes cover the v0.1 foundation. See [the v0.2 account security supplement](ACCOUNT-SECURITY.md) for current behavior and verification.
+
+
 Verified on 12 November 2026. Tests use synthetic records only.
 
 | Check | Result | Evidence / limits |

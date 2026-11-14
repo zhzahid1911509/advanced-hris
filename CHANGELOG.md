@@ -1,3 +1,7 @@
+# v0.2.0 — Account security
+
+Added authenticator enrollment, recovery codes, account attempt limits, session management, MFA for invitation and membership changes, and runtime database diagnostics. See [implementation notes](docs/ACCOUNT-SECURITY.md).
+
 # Changelog
 
 ## 0.1.0 — 2026-11-12

@@ -1,5 +1,8 @@
 # Feature implementation — v0.1.0
 
+These notes cover the v0.1 foundation. See [the v0.2 account security supplement](ACCOUNT-SECURITY.md) for current behavior and verification.
+
+
 ## Release boundary
 
 This release implements a working slice of Phase 2 and basic Core HR from Phase 3A. It is suitable for local evaluation and continued development. It is not an enterprise-production completion claim. Planned modules are not displayed as working placeholders.
