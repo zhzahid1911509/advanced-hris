@@ -1,0 +1,53 @@
+# Local all-container alternative. Merge with compose.yaml; not a hardened production deployment.
+x-app: &app
+  image: advanced-hris:0.1.0
+  build:
+    context: .
+    args:
+      API_INTERNAL_URL: http://api:4000
+  environment: &env
+    DATABASE_URL: postgresql://hris_app:${APP_DB_PASSWORD}@postgres:5432/hris
+    REDIS_URL: redis://redis:6379
+    APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+    COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+    SMTP_HOST: mailpit
+    SMTP_PORT: 1025
+    MAIL_FROM: "HRIS <no-reply@hris.local>"
+    NODE_ENV: development
+services:
+  migrate:
+    <<: *app
+    command: ["npm", "run", "db:migrate"]
+    environment:
+      <<: *env
+      MIGRATION_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/hris
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    <<: *app
+    command: ["npm", "run", "start", "-w", "@hris/api"]
+    ports: ["127.0.0.1:4000:4000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  worker:
+    <<: *app
+    command: ["npm", "run", "start", "-w", "@hris/worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      mailpit:
+        condition: service_started
+  web:
+    <<: *app
+    command: ["npm", "run", "start", "-w", "@hris/web"]
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:4000
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [api]

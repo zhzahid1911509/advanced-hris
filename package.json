@@ -1,0 +1,37 @@
+{
+  "name": "advanced-hris",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0 <25"
+  },
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "db:generate": "prisma generate --schema database/schema.prisma",
+    "db:migrate": "node scripts/migrate.mjs",
+    "dev": "concurrently -k -n api,web,worker \"npm run dev -w @hris/api\" \"npm run dev -w @hris/web\" \"npm run dev -w @hris/worker\"",
+    "build": "npm run db:generate && npm run build -w @hris/api && npm run build -w @hris/worker && npm run build -w @hris/web",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "test:integration": "node --import tsx tests/integration.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "concurrently": "^9.2.1",
+    "prisma": "6.19.3",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "pg": "^8.16.3",
+    "@types/pg": "^8.15.6"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.0"
+  }
+}

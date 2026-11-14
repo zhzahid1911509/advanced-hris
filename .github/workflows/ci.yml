@@ -1,0 +1,34 @@
+name: Verify HRIS
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test-owner-password-not-for-production
+          POSTGRES_DB: hris_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hris_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hris_app:test-runtime-password-not-for-production@localhost:5432/hris_test
+      MIGRATION_DATABASE_URL: postgresql://postgres:test-owner-password-not-for-production@localhost:5432/hris_test
+      APP_DB_PASSWORD: test-runtime-password-not-for-production
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:migrate
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm audit --omit=dev --audit-level=high

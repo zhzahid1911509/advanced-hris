@@ -1,0 +1,19 @@
+{
+  "name": "@hris/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node --import tsx --watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bullmq": "^5.61.0",
+    "ioredis": "^5.8.0",
+    "nodemailer": "10.5.0"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^7.0.4"
+  }
+}

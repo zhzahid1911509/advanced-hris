@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model Tenant {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  slug String @unique
+  timezone String @default("Asia/Dhaka")
+  createdAt DateTime @default(now())
+  @@map("tenants")
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  name String
+  passwordHash String
+  verified Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@map("users")
+}
+model Membership {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  userId String @db.Uuid
+  role String
+  active Boolean @default(true)
+  @@unique([tenantId,userId])
+  @@index([userId,active])
+  @@map("memberships")
+}
+model Session {
+  id String @id
+  userId String @db.Uuid
+  csrf String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([userId])
+  @@map("sessions")
+}
+model AuthToken {
+  id String @id
+  userId String? @db.Uuid
+  tenantId String? @db.Uuid
+  employeeId String? @db.Uuid
+  email String
+  kind String
+  role String?
+  expiresAt DateTime
+  @@index([email,kind])
+  @@map("auth_tokens")
+}
+model RateLimit {
+  id String @id
+  count Int @default(1)
+  expiresAt DateTime
+  @@map("rate_limits")
+}
+model AuthMail {
+  id String @id @default(uuid()) @db.Uuid
+  email String
+  subject String
+  body String
+  sentAt DateTime?
+  createdAt DateTime @default(now())
+  @@map("auth_mail")
+}
+model OrgUnit {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  name String
+  kind String
+  createdAt DateTime @default(now())
+  @@unique([tenantId,id])
+  @@unique([tenantId,kind,name])
+  @@map("org_units")
+}
+model Employee {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  employeeNo String
+  name String
+  email String
+  phone String @default("")
+  address String @default("")
+  emergencyContact String @default("")
+  title String
+  category String @default("PERMANENT")
+  status String @default("ACTIVE")
+  joinedOn DateTime @db.Date
+  branchId String? @db.Uuid
+  departmentId String? @db.Uuid
+  userId String? @db.Uuid
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([tenantId,id])
+  @@unique([tenantId,employeeNo])
+  @@unique([tenantId,email])
+  @@unique([tenantId,userId])
+  @@index([tenantId,status,name])
+  @@map("employees")
+}
+model EmployeeEvent {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  employeeId String @db.Uuid
+  kind String
+  detail String
+  actorId String @db.Uuid
+  createdAt DateTime @default(now())
+  @@index([tenantId,employeeId,createdAt])
+  @@map("employee_events")
+}
+model ProfileRequest {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  employeeId String @db.Uuid
+  requesterId String @db.Uuid
+  baseVersion Int
+  changes Json
+  state String @default("PENDING")
+  reviewerId String? @db.Uuid
+  reason String?
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  @@index([tenantId,state])
+  @@map("profile_requests")
+}
+model AuditEvent {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  actorId String @db.Uuid
+  action String
+  entityId String
+  detail Json
+  createdAt DateTime @default(now())
+  @@index([tenantId,createdAt])
+  @@map("audit_events")
+}
+model Outbox {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  kind String
+  payload Json
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([tenantId,deliveredAt])
+  @@map("outbox")
+}
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  userId String @db.Uuid
+  sourceId String @unique @db.Uuid
+  message String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([tenantId,userId,createdAt])
+  @@map("notifications")
+}

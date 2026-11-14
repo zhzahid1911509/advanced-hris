@@ -1,0 +1,14 @@
+feat(hris): deliver v0.1.0 multi-tenant foundation and Core HR workflow
+
+- add Next.js workspace, NestJS API and BullMQ delivery worker
+- implement verified registration, session authentication and password recovery
+- enforce tenant membership, PostgreSQL RLS and tenant-qualified constraints
+- add branch/department setup and version-protected employee records
+- support employee invitations, scoped roles and membership suspension
+- implement independent contact-change approvals with atomic audit and outbox
+- add real dashboard, employee timeline, notifications and audit views
+- include Docker setup, migrations, API docs and delivery/runbook guidance
+- test cross-tenant denial, two-process approval races and worker replay safety
+
+Scope: first foundation increment; remaining security, documents, payroll,
+attendance and advanced HR modules are documented as pending.
