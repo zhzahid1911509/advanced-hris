@@ -1,3 +1,7 @@
+# v0.4.0 — Direct-report teams
+
+Added audited reporting-line assignments, cycle prevention, team manager invitations and scoped employee visibility. See [implementation and upgrade](docs/DIRECT-REPORTS.md).
+
 # v0.3.0 — Scoped employee directory
 
 Added branch and department manager roles, scoped directory and dashboard queries, MFA-protected private phone access policies and audit events. Includes the v0.2 migration and worker hotfixes.

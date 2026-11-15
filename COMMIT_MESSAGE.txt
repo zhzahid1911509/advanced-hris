@@ -1,1 +1,1 @@
-feat(access): scope employee directory by branch and department
+feat(access): add direct-report teams and audited manager assignments

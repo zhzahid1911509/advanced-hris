@@ -39,20 +39,23 @@ export class PeopleController {
  @Get('employees') async employees(@Req() req:AuthRequest,@Query() query:unknown){
   const q=z.object({search:z.string().max(100).default(''),page:z.coerce.number().int().min(1).max(100000).default(1)}).parse(query);
   return tenantTx(req.context,async tx=>{
-   const where={...await employeeScope(tx,req.context),OR:[{name:{contains:q.search,mode:'insensitive' as const}},{employeeNo:{contains:q.search,mode:'insensitive' as const}},{title:{contains:q.search,mode:'insensitive' as const}}]};
+   const where={AND:[await employeeScope(tx,req.context)],OR:[{name:{contains:q.search,mode:'insensitive' as const}},{employeeNo:{contains:q.search,mode:'insensitive' as const}},{title:{contains:q.search,mode:'insensitive' as const}}]};
    const [items,total]=await Promise.all([tx.employee.findMany({where,skip:(q.page-1)*20,take:20,orderBy:{name:'asc'},select:{id:true,employeeNo:true,name:true,title:true,email:true,status:true,category:true,branchId:true,departmentId:true,joinedOn:true,version:true}}),tx.employee.count({where})]);
    return {items,total,page:q.page,pageSize:20};
   });
  }
  @Get('employees/:id') async employee(@Req() req:AuthRequest,@Param('id') id:string){uuid.parse(id);return tenantTx(req.context,async tx=>{
   const e=await ownEmployee(tx,req.context,id);
+  const manager=req.context.role==='ADMIN' && e.managerId
+   ? await tx.employee.findFirst({where:{id:e.managerId,tenantId:req.context.tenantId},select:{employeeNo:true,name:true}})
+   : null;
   const timeline=await tx.employeeEvent.findMany({where:{employeeId:id},orderBy:{createdAt:'desc'},take:50});
   // Auditors can inspect events and employment metadata but not private contact fields.
   if (isManager(req.context.role)) {
    const policy=await tx.directoryPolicy.findUnique({where:{tenantId_role:{tenantId:req.context.tenantId,role:req.context.role}}});
-   return {...e,address:undefined,emergencyContact:undefined,phone:policy?.showPhone?e.phone:undefined,timeline:[]};
+   return {...e,managerId:undefined,address:undefined,emergencyContact:undefined,phone:policy?.showPhone?e.phone:undefined,timeline:[]};
   }
-  return {...e,...(req.context.role==='AUDITOR'?{phone:undefined,address:undefined,emergencyContact:undefined}:{}),timeline};
+  return {...e,manager,managerId:undefined,...(req.context.role==='AUDITOR'?{phone:undefined,address:undefined,emergencyContact:undefined}:{}),timeline};
  });}
  @Post('employees') async create(@Req() req:AuthRequest,@Body() body:unknown){
   requireRole(req.context,'ADMIN','HR');const d=employeeInput.parse(body);
@@ -76,6 +79,40 @@ export class PeopleController {
    await event(tx,req.context,id,'UPDATED',reason);
    await audit(tx,req.context,'EMPLOYEE_UPDATED',id,{fields:changed,reason,previousVersion:version,newVersion:version+1});
    return tx.employee.findUniqueOrThrow({where:{id}});
+  });
+ }
+ @Patch('employees/:id/reporting-line')
+ async setManager(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
+  requireRole(req.context,'ADMIN');
+  await requireVerifiedSession(req);
+  uuid.parse(id);
+  const input=z.object({managerEmployeeNo:z.string().trim().min(1).max(30).nullable(),version:z.number().int().positive()}).strict().parse(body);
+  return tenantTx(req.context,async tx=>{
+   const tenantId=req.context.tenantId;
+   // Serialize hierarchy changes to prevent two concurrent edits from forming a cycle.
+   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${tenantId}, 1794))`;
+   const employee=await tx.employee.findFirst({where:{tenantId,id}});
+   if(!employee) throw new NotFoundException('Employee not found.');
+   if(employee.version!==input.version) throw new ConflictException('Reopen the profile before changing the reporting line.');
+   let managerId:string|null=null;
+   if(input.managerEmployeeNo!==null){
+    const manager=await tx.employee.findFirst({where:{tenantId,employeeNo:input.managerEmployeeNo},select:{id:true}});
+    if(!manager) throw new NotFoundException('Manager employee number not found in this workspace.');
+    managerId=manager.id;
+    const cycle=await tx.$queryRaw<{id:string}[]>`
+      WITH RECURSIVE chain AS (
+        SELECT id,"managerId" FROM employees WHERE "tenantId"=${tenantId}::uuid AND id=${managerId}::uuid
+        UNION
+        SELECT e.id,e."managerId" FROM employees e JOIN chain c ON e.id=c."managerId"
+        WHERE e."tenantId"=${tenantId}::uuid
+      ) SELECT id FROM chain WHERE id=${id}::uuid`;
+    if(cycle.length) throw new BadRequestException('This assignment would create a reporting cycle.');
+   }
+   if(managerId===employee.managerId) return {version:employee.version};
+   const updated=await tx.employee.updateMany({where:{tenantId,id,version:input.version},data:{managerId,version:{increment:1}}});
+   if(!updated.count) throw new ConflictException('Reopen the profile before changing the reporting line.');
+   await audit(tx,req.context,'REPORTING_LINE_CHANGED',id,{previousManagerId:employee.managerId,managerId});
+   return {version:input.version+1};
   });
  }
  @Post('employees/:id/invite') async invite(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
