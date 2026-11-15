@@ -1,3 +1,7 @@
+# v0.5.0 — Custom directory roles
+
+Added workspace-defined directory scopes and phone visibility, role lifecycle controls, invitations and member assignments. See [the feature guide](docs/CUSTOM-DIRECTORY-ROLES.md).
+
 # v0.4.0 — Direct-report teams
 
 Added audited reporting-line assignments, cycle prevention, team manager invitations and scoped employee visibility. See [implementation and upgrade](docs/DIRECT-REPORTS.md).

@@ -1,1 +1,1 @@
-feat(access): add direct-report teams and audited manager assignments
+feat(access): add workspace-defined directory roles and scoped assignments

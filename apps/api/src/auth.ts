@@ -125,7 +125,7 @@ export class AuthController {
    if(u){if(!await argon2.verify(u.passwordHash,d.password)) throw new UnauthorizedException('Use the existing account password to accept this invitation.');}
    else u=await tx.user.create({data:{email:t.email,name:d.name,passwordHash,verified:true}});
    if(!u.verified) u=await tx.user.update({where:{id:u.id},data:{verified:true}});
-   await tx.membership.create({data:{tenantId:t.tenantId!,userId:u.id,role:t.role!}});
+   await tx.membership.create({data:{tenantId:t.tenantId!,userId:u.id,role:t.role!,customRoleId:t.customRoleId}});
    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${t.tenantId!}, true)`;
    if(t.employeeId) await tx.employee.update({where:{id:t.employeeId},data:{userId:u.id}});
    await tx.auditEvent.create({data:{tenantId:t.tenantId!,actorId:u.id,action:'INVITATION_ACCEPTED',entityId:u.id,detail:{role:t.role}}});

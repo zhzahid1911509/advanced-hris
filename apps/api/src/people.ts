@@ -1,3 +1,4 @@
+import { CustomRoleController, resolveSelection, roleSelection } from './custom-roles';
 import { assignableRoles, managerRoles, isManager, employeeScope } from './directory-access';
 import { requireVerifiedSession } from './account-security';
 import { Body, Controller, Get, Post, Patch, Param, Query, Req, UseGuards, Module, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
@@ -52,7 +53,7 @@ export class PeopleController {
   const timeline=await tx.employeeEvent.findMany({where:{employeeId:id},orderBy:{createdAt:'desc'},take:50});
   // Auditors can inspect events and employment metadata but not private contact fields.
   if (isManager(req.context.role)) {
-   const policy=await tx.directoryPolicy.findUnique({where:{tenantId_role:{tenantId:req.context.tenantId,role:req.context.role}}});
+   const policy=req.context.directoryRole ?? await tx.directoryPolicy.findUnique({where:{tenantId_role:{tenantId:req.context.tenantId,role:req.context.role}}});
    return {...e,managerId:undefined,address:undefined,emergencyContact:undefined,phone:policy?.showPhone?e.phone:undefined,timeline:[]};
   }
   return {...e,manager,managerId:undefined,...(req.context.role==='AUDITOR'?{phone:undefined,address:undefined,emergencyContact:undefined}:{}),timeline};
@@ -116,11 +117,12 @@ export class PeopleController {
   });
  }
  @Post('employees/:id/invite') async invite(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
-  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:z.enum(assignableRoles)}).strict().parse(body);
+  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:roleSelection}).strict().parse(body);
   return tenantTx(req.context,async tx=>{
    const e=await ownEmployee(tx,req.context,id);if(e.userId)throw new ConflictException('Employee already has an account.');
    const raw=token();await tx.authToken.deleteMany({where:{tenantId:req.context.tenantId,employeeId:id,kind:'INVITE'}});
-   await tx.authToken.create({data:{id:hash(raw),email:e.email,tenantId:req.context.tenantId,employeeId:id,kind:'INVITE',role:d.role,expiresAt:new Date(Date.now()+48*3600000)}});
+   const selection=await resolveSelection(tx,req.context.tenantId,d.role);
+   await tx.authToken.create({data:{id:hash(raw),email:e.email,tenantId:req.context.tenantId,employeeId:id,kind:'INVITE',...selection,expiresAt:new Date(Date.now()+48*3600000)}});
    await tx.authMail.create({data:{email:e.email,subject:'Your HRIS invitation',body:`You have been invited to HRIS.\n\n${origin}/?action=invite&token=${raw}\n\nThis link expires in 48 hours. Existing users must enter their current password.`}});
    await audit(tx,req.context,'EMPLOYEE_INVITED',id,{role:d.role});return {message:'Invitation queued for email delivery.'};
   });
@@ -187,12 +189,13 @@ export class PeopleController {
   return ms.map(m=>({...m,user:users.find(u=>u.id===m.userId)}));
  });}
  @Patch('members/:id') async changeMember(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
-  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:z.enum(assignableRoles),active:z.boolean()}).strict().parse(body);
+  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:roleSelection,active:z.boolean()}).strict().parse(body);
   return tenantTx(req.context,async tx=>{
    const m=await tx.membership.findFirst({where:{id,tenantId:req.context.tenantId}});if(!m)throw new NotFoundException();
    if(m.role==='ADMIN' || m.userId===req.userId)throw new BadRequestException('Administrator and self-access changes are not supported.');
-   await tx.membership.update({where:{id},data:d});await audit(tx,req.context,'MEMBERSHIP_CHANGED',id,d);return {message:'Access updated. It takes effect on the next request.'};
+   const selection=await resolveSelection(tx,req.context.tenantId,d.role);
+   await tx.membership.update({where:{id},data:{...selection,active:d.active}});await audit(tx,req.context,'MEMBERSHIP_CHANGED',id,d);return {message:'Access updated. It takes effect on the next request.'};
   });
  }
 }
-@Module({controllers:[PeopleController]}) export class PeopleModule {}
+@Module({controllers:[PeopleController,CustomRoleController]}) export class PeopleModule {}

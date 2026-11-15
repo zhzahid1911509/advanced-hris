@@ -3,12 +3,17 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { ForbiddenException } from '@nestjs/common';
 export const db=new PrismaClient();
 export type Tx=Prisma.TransactionClient;
-export type Context={userId:string;tenantId:string;role:string};
+export type Context={userId:string;tenantId:string;role:string;directoryRole?:{scope:string;showPhone:boolean}};
 export async function tenantTx<T>(c:Context,fn:(tx:Tx)=>Promise<T>):Promise<T> {
  return db.$transaction(async tx=>{
   const membership=await tx.membership.findUnique({where:{tenantId_userId:{tenantId:c.tenantId,userId:c.userId}}});
   if(!membership?.active || membership.role!==c.role) throw new ForbiddenException('Membership has changed. Refresh and try again.');
   await tx.$executeRaw`SELECT set_config('app.tenant_id', ${c.tenantId}, true)`;
+  if (membership.role==='CUSTOM') {
+   const role=await tx.customRole.findFirst({where:{id:membership.customRoleId!,tenantId:c.tenantId},select:{scope:true,showPhone:true}});
+   if (!role) throw new ForbiddenException('Workspace role is unavailable.');
+   c.directoryRole=role;
+  }
   return fn(tx);
  },{timeout:10000});
 }
