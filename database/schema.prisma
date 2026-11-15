@@ -207,3 +207,20 @@ model DirectoryDelegation {
   @@index([tenantId,grantorId,createdAt],map:"directory_delegations_sent")
   @@map("directory_delegations")
 }
+
+model EmployeeDocument {
+  id String @id @db.Uuid
+  tenantId String @db.Uuid
+  employeeId String @db.Uuid
+  uploadedBy String @db.Uuid
+  name String
+  version Int
+  size Int
+  digest String
+  status String @default("QUARANTINED")
+  payload Bytes?
+  expiresOn DateTime? @db.Date
+  createdAt DateTime @default(now()) @db.Timestamptz
+  @@unique([tenantId,employeeId,name,version])
+  @@map("employee_documents")
+}

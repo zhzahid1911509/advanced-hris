@@ -1,6 +1,6 @@
 # Local all-container alternative. Merge with compose.yaml; not a hardened production deployment.
 x-app: &app
-  image: advanced-hris:0.6.0
+  image: advanced-hris:0.7.0
   build:
     context: .
     args:
@@ -30,6 +30,13 @@ services:
     <<: *app
     environment:
       <<: *env
+      DOCUMENT_S3_BUCKET: ${DOCUMENT_S3_BUCKET:-}
+      DOCUMENT_S3_ENDPOINT: ${DOCUMENT_S3_ENDPOINT:-}
+      DOCUMENT_S3_REGION: ${DOCUMENT_S3_REGION:-us-east-1}
+      DOCUMENT_S3_KEY: ${DOCUMENT_S3_KEY:-}
+      DOCUMENT_S3_SECRET: ${DOCUMENT_S3_SECRET:-}
+      DOCUMENT_CLAMD_HOST: ${DOCUMENT_CONTAINER_CLAMD_HOST:-clamd}
+      DOCUMENT_CLAMD_PORT: ${DOCUMENT_CLAMD_PORT:-3310}
       MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?Run npm run setup}
     command: ["npm", "run", "start", "-w", "@hris/api"]
     ports: ["127.0.0.1:4000:4000"]

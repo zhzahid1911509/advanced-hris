@@ -1,3 +1,4 @@
+import {documentServices} from './document-services';
 import 'dotenv/config';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -23,7 +24,8 @@ async function main(){
  if(!process.env.MIGRATION_DATABASE_URL || !process.env.DATABASE_URL)throw new Error('Set migration and runtime database URLs. Run against a dedicated test database.');
  await owner.connect();await runtime.connect();
  const testKey=randomBytes(32).toString('hex');
- const servers=[4101,4102].map(port=>spawn(process.execPath,['apps/api/dist/main.js'],{env:{...process.env,API_PORT:String(port),MFA_ENCRYPTION_KEY:testKey,APP_ORIGIN:origin,REGISTRATION_ENABLED:'true',NODE_ENV:'test'},stdio:['ignore','pipe','pipe']}));
+ const services=await documentServices();
+ const servers=[4101,4102].map(port=>spawn(process.execPath,['apps/api/dist/main.js'],{env:{...process.env,...services.env,API_PORT:String(port),MFA_ENCRYPTION_KEY:testKey,APP_ORIGIN:origin,REGISTRATION_ENABLED:'true',NODE_ENV:'test'},stdio:['ignore','pipe','pipe']}));
  for(const p of servers)p.stderr.on('data',d=>process.stderr.write(d));
  const prefix=randomUUID().slice(0,8);const password='Testing-HRIS-long-password!';
  try{
@@ -176,6 +178,40 @@ async function main(){
   assert.equal(cleared.status,200);
   const reciprocal=await Promise.all([setReportingLine(peer.json.id,'OUT',freePeer.json.version),setReportingLine(outside.json.id,'PEER',cleared.json.version,a,second)]);
   check('concurrent reciprocal assignments cannot form a cycle',()=>assert.deepEqual(reciprocal.map(r=>r.status).sort(),[200,400]));
+  const docPath='employees/'+id+'/documents';
+  const pdf=Buffer.from('%PDF-1.4\n'+' '.repeat(110000)+'\n%%EOF\n');
+  const upload={id:randomUUID(),name:'contract.pdf',content:pdf.toString('base64'),expiresOn:'2028-01-01'};
+  res=await request(docPath,'POST',upload,employeeSession);
+  check('own PDF remains quarantined while scanner unavailable',()=>{assert.equal(res.status,201,JSON.stringify(res.json));assert.equal(res.json.status,'QUARANTINED');});
+  check('scanner outage identifies scan stage',()=>assert.equal(res.json.diagnostic.stage,'scan'));
+  const doc=docPath+'/'+upload.id;
+  res=await request(doc+'/download','POST',{},a);
+  check('quarantined bytes cannot be downloaded',()=>assert.equal(res.status,403));
+  res=await request(docPath,'GET',undefined,b);
+  check('document metadata inaccessible across tenants',()=>assert.equal(res.status,404));
+  res=await request('employees/'+peer.json.id+'/documents','GET',undefined,employeeSession);
+  check('team scope confers no document access',()=>assert.equal(res.status,404));
+  services.state.verdict='clean';services.state.storageOffline=true;
+  res=await request(doc+'/retry','POST',{},a);
+  check('storage outage retains recoverable quarantine',()=>assert.equal(res.json.status,'QUARANTINED'));
+  check('storage outage identifies upload stage and status',()=>{assert.equal(res.json.diagnostic.stage,'storage');assert.equal(res.json.diagnostic.httpStatus,503);});
+  services.state.storageOffline=false;
+  res=await request(doc+'/retry','POST',{},a,second);
+  check('retry releases scanned document',()=>assert.equal(res.json.status,'READY',JSON.stringify(res.json)));
+  res=await request(doc+'/download','POST',{},employeeSession);
+  const signed=new URL(res.json.url);
+  check('authorized download signed for sixty seconds',()=>{assert.equal(signed.searchParams.get('X-Amz-Expires'),'60');assert.ok(signed.searchParams.has('X-Amz-Signature'));});
+  const bytes=await (await fetch(signed)).arrayBuffer();
+  check('download matches uploaded PDF',()=>assert.deepEqual(Buffer.from(bytes),pdf));
+  res=await request(docPath,'POST',upload,employeeSession);
+  check('repeated upload ID preserves original version',()=>assert.equal(res.json.version,1));
+  services.state.verdict='reject';
+  const rejected=await request(docPath,'POST',{...upload,id:randomUUID()},a);
+  check('scanner detection rejects next version',()=>{assert.equal(rejected.json.status,'REJECTED');assert.equal(rejected.json.version,2);});
+  res=await request(docPath+'/'+rejected.json.id+'/download','POST',{},a);
+  check('rejected version cannot get a download URL',()=>assert.equal(res.status,403));
+  res=await request(docPath,'POST',{...upload,id:randomUUID(),content:Buffer.from('text').toString('base64')},a);
+  check('file extension alone cannot pass PDF validation',()=>assert.equal(res.status,400));
   const roleInput={name:'Directory coordinator',scope:'BRANCH',showPhone:false};
   res=await request('custom-roles','POST',roleInput,employeeSession);
   check('members cannot create custom roles',()=>assert.equal(res.status,403));
@@ -278,7 +314,7 @@ async function main(){
  }finally{
   for(const server of servers)server.kill('SIGTERM');
   await Promise.all(servers.map(s=>s.exitCode===null?once(s,'exit'):Promise.resolve()));
-  await runtime.end();await owner.end();
+  services.close();await runtime.end();await owner.end();
  }
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

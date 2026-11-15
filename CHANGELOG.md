@@ -1,3 +1,7 @@
+# v0.7.0 — Private employee documents
+
+Added PDF uploads with private quarantine, ClamAV decisions, S3-compatible storage, version history and authorized attachment downloads.
+
 # v0.6.0 — Temporary directory delegation
 
 Added auditable, revocable professional-profile sharing with per-read grantor scope checks and expiry. See [implementation notes](docs/DIRECTORY-DELEGATION.md).

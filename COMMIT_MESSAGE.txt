@@ -1,1 +1,1 @@
-feat(access): add expiring and revocable employee directory delegations
+feat(documents): add private employee PDFs with quarantine and signed downloads
