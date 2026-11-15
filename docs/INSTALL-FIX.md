@@ -1,0 +1,1 @@
+The v0.6 release bumped the worker dependency to 10.6.0 by mistake. This archive restores nodemailer 10.5.0 to match package-lock.json. From the project root run npm ci, then follow docs/DIRECTORY-DELEGATION.md.

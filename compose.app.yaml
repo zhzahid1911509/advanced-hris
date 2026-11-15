@@ -1,6 +1,6 @@
 # Local all-container alternative. Merge with compose.yaml; not a hardened production deployment.
 x-app: &app
-  image: advanced-hris:0.5.0
+  image: advanced-hris:0.6.0
   build:
     context: .
     args:

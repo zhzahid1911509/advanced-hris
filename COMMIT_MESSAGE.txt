@@ -1,1 +1,1 @@
-feat(access): add workspace-defined directory roles and scoped assignments
+feat(access): add expiring and revocable employee directory delegations

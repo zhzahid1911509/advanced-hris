@@ -1,3 +1,4 @@
+import { DelegationController } from './delegations';
 import { CustomRoleController, resolveSelection, roleSelection } from './custom-roles';
 import { assignableRoles, managerRoles, isManager, employeeScope } from './directory-access';
 import { requireVerifiedSession } from './account-security';
@@ -198,4 +199,4 @@ export class PeopleController {
   });
  }
 }
-@Module({controllers:[PeopleController,CustomRoleController]}) export class PeopleModule {}
+@Module({controllers:[PeopleController,CustomRoleController,DelegationController]}) export class PeopleModule {}

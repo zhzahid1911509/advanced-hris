@@ -1,3 +1,7 @@
+# v0.6.0 — Temporary directory delegation
+
+Added auditable, revocable professional-profile sharing with per-read grantor scope checks and expiry. See [implementation notes](docs/DIRECTORY-DELEGATION.md).
+
 # v0.5.0 — Custom directory roles
 
 Added workspace-defined directory scopes and phone visibility, role lifecycle controls, invitations and member assignments. See [the feature guide](docs/CUSTOM-DIRECTORY-ROLES.md).

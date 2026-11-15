@@ -1,9 +1,9 @@
-# Remaining foundation roadmap after v0.5.0
+# Remaining foundation roadmap after v0.6.0
 
 Finish the remaining foundation before attendance/payroll:
 
 1. Delivered in v0.2.0 — see [account security](ACCOUNT-SECURITY.md).
-2. Branch/department manager templates and configurable phone access shipped in v0.3.0. Explicit [direct-report teams](DIRECT-REPORTS.md) shipped in v0.4.0. Custom directory roles shipped in v0.5.0. Next: time-limited delegation bounded by the delegating member’s current authority. See [the directory matrix](SCOPED-DIRECTORY.md).
+2. Branch/department manager templates and configurable phone access shipped in v0.3.0. Explicit [direct-report teams](DIRECT-REPORTS.md) shipped in v0.4.0. Custom directory roles shipped in v0.5.0. Time-limited [directory delegation](DIRECTORY-DELEGATION.md) shipped in v0.6.0. The next foundation increment is private employee documents. See [the directory matrix](SCOPED-DIRECTORY.md).
 3. Private document storage, quarantine/scanning states, authorized download and expiry metadata.
 4. Versioned approval runtime and employee change workflows using it.
 5. Legal entities, effective-dated employment assignments, job grades/positions and richer employee records.
