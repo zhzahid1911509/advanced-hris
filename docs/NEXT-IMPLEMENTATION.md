@@ -1,9 +1,9 @@
-# Remaining foundation roadmap after v0.2.0
+# Remaining foundation roadmap after v0.3.0
 
 Finish the remaining foundation before attendance/payroll:
 
-1. Delivered in v0.2.0 — see [account security](ACCOUNT-SECURITY.md). The next planned implementation is scoped permissions and role templates.
-2. Full role templates and scoped/field permissions with a tested permission matrix.
+1. Delivered in v0.2.0 — see [account security](ACCOUNT-SECURITY.md).
+2. Branch/department manager templates and configurable phone access shipped in v0.3.0. Continue with custom roles, explicit team scope, and delegated permissions. See [the directory matrix](SCOPED-DIRECTORY.md).
 3. Private document storage, quarantine/scanning states, authorized download and expiry metadata.
 4. Versioned approval runtime and employee change workflows using it.
 5. Legal entities, effective-dated employment assignments, job grades/positions and richer employee records.

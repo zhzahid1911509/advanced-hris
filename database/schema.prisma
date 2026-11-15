@@ -170,3 +170,11 @@ model Notification {
   @@index([tenantId,userId,createdAt])
   @@map("notifications")
 }
+
+model DirectoryPolicy {
+  tenantId String @db.Uuid
+  role String
+  showPhone Boolean @default(false)
+  @@id([tenantId,role])
+  @@map("directory_policies")
+}

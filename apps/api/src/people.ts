@@ -1,3 +1,4 @@
+import { assignableRoles, managerRoles, isManager, employeeScope } from './directory-access';
 import { requireVerifiedSession } from './account-security';
 import { Body, Controller, Get, Post, Patch, Param, Query, Req, UseGuards, Module, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -7,7 +8,7 @@ import { TenantGuard, AuthRequest, requireRole, hash, token } from './security';
 import { employeeInput, profileInput, uuid, name, email } from './validation';
 import { origin } from './config';
 async function ownEmployee(tx:Tx,c:Context,id:string){
- const employee=await tx.employee.findFirst({where:{id,tenantId:c.tenantId,...(c.role==='EMPLOYEE'?{userId:c.userId}:{})}});
+ const employee=await tx.employee.findFirst({where:{id,...await employeeScope(tx,c)}});
  if(!employee) throw new NotFoundException('Employee not found.');return employee;
 }
 async function validateUnits(tx:Tx,tenantId:string,branchId:string|null,departmentId:string|null){
@@ -19,7 +20,7 @@ async function validateUnits(tx:Tx,tenantId:string,branchId:string|null,departme
 @Controller() @UseGuards(TenantGuard)
 export class PeopleController {
  @Get('dashboard') async dashboard(@Req() req:AuthRequest){return tenantTx(req.context,async tx=>{
-  const self=req.context.role==='EMPLOYEE';const scope={tenantId:req.context.tenantId,...(self?{userId:req.userId}:{})};
+  const self=req.context.role==='EMPLOYEE' || isManager(req.context.role);const scope=await employeeScope(tx,req.context);
   const [employees,active,units,pending,recent]=await Promise.all([
    tx.employee.count({where:scope}),tx.employee.count({where:{...scope,status:'ACTIVE'}}),tx.orgUnit.count(),
    tx.profileRequest.count({where:{state:'PENDING',...(self?{requesterId:req.userId}:{})}}),
@@ -38,7 +39,7 @@ export class PeopleController {
  @Get('employees') async employees(@Req() req:AuthRequest,@Query() query:unknown){
   const q=z.object({search:z.string().max(100).default(''),page:z.coerce.number().int().min(1).max(100000).default(1)}).parse(query);
   return tenantTx(req.context,async tx=>{
-   const where={tenantId:req.context.tenantId,...(req.context.role==='EMPLOYEE'?{userId:req.userId}:{}),OR:[{name:{contains:q.search,mode:'insensitive' as const}},{employeeNo:{contains:q.search,mode:'insensitive' as const}},{title:{contains:q.search,mode:'insensitive' as const}}]};
+   const where={...await employeeScope(tx,req.context),OR:[{name:{contains:q.search,mode:'insensitive' as const}},{employeeNo:{contains:q.search,mode:'insensitive' as const}},{title:{contains:q.search,mode:'insensitive' as const}}]};
    const [items,total]=await Promise.all([tx.employee.findMany({where,skip:(q.page-1)*20,take:20,orderBy:{name:'asc'},select:{id:true,employeeNo:true,name:true,title:true,email:true,status:true,category:true,branchId:true,departmentId:true,joinedOn:true,version:true}}),tx.employee.count({where})]);
    return {items,total,page:q.page,pageSize:20};
   });
@@ -47,6 +48,10 @@ export class PeopleController {
   const e=await ownEmployee(tx,req.context,id);
   const timeline=await tx.employeeEvent.findMany({where:{employeeId:id},orderBy:{createdAt:'desc'},take:50});
   // Auditors can inspect events and employment metadata but not private contact fields.
+  if (isManager(req.context.role)) {
+   const policy=await tx.directoryPolicy.findUnique({where:{tenantId_role:{tenantId:req.context.tenantId,role:req.context.role}}});
+   return {...e,address:undefined,emergencyContact:undefined,phone:policy?.showPhone?e.phone:undefined,timeline:[]};
+  }
   return {...e,...(req.context.role==='AUDITOR'?{phone:undefined,address:undefined,emergencyContact:undefined}:{}),timeline};
  });}
  @Post('employees') async create(@Req() req:AuthRequest,@Body() body:unknown){
@@ -74,7 +79,7 @@ export class PeopleController {
   });
  }
  @Post('employees/:id/invite') async invite(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
-  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:z.enum(['HR','EMPLOYEE','AUDITOR'])}).strict().parse(body);
+  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:z.enum(assignableRoles)}).strict().parse(body);
   return tenantTx(req.context,async tx=>{
    const e=await ownEmployee(tx,req.context,id);if(e.userId)throw new ConflictException('Employee already has an account.');
    const raw=token();await tx.authToken.deleteMany({where:{tenantId:req.context.tenantId,employeeId:id,kind:'INVITE'}});
@@ -96,7 +101,7 @@ export class PeopleController {
   });
  }
  @Get('profile-requests') async requests(@Req() req:AuthRequest){return tenantTx(req.context,async tx=>{
-  const requests=await tx.profileRequest.findMany({where:req.context.role==='EMPLOYEE'?{requesterId:req.userId}:{},orderBy:{createdAt:'desc'},take:100});
+  const requests=await tx.profileRequest.findMany({where:(req.context.role==='EMPLOYEE'||isManager(req.context.role))?{requesterId:req.userId}:{},orderBy:{createdAt:'desc'},take:100});
   const employees=await tx.employee.findMany({where:{id:{in:requests.map(r=>r.employeeId)}},select:{id:true,name:true}});
   return requests.map(r=>({...r,employeeName:employees.find(e=>e.id===r.employeeId)?.name,...(req.context.role==='AUDITOR'?{changes:undefined}:{})}));
  });}
@@ -121,13 +126,31 @@ export class PeopleController {
  @Get('audit') async audits(@Req() req:AuthRequest){requireRole(req.context,'ADMIN','HR','AUDITOR');return tenantTx(req.context,tx=>tx.auditEvent.findMany({orderBy:{createdAt:'desc'},take:100}));}
  @Get('notifications') async notifications(@Req() req:AuthRequest){return tenantTx(req.context,tx=>tx.notification.findMany({where:{userId:req.userId},orderBy:{createdAt:'desc'},take:50}));}
  @Post('notifications/:id/read') async read(@Req() req:AuthRequest,@Param('id') id:string){uuid.parse(id);return tenantTx(req.context,async tx=>{await tx.notification.updateMany({where:{id,userId:req.userId},data:{readAt:new Date()}});return {message:'Marked as read.'};});}
+ @Get('directory-policies') async policies(@Req() req:AuthRequest){
+  requireRole(req.context,'ADMIN');
+  return tenantTx(req.context,async tx=>{
+   const rows=await tx.directoryPolicy.findMany({where:{tenantId:req.context.tenantId}});
+   return managerRoles.map(role=>({role,showPhone:rows.find(row=>row.role===role)?.showPhone??false}));
+  });
+ }
+ @Patch('directory-policies/:role') async changePolicy(@Req() req:AuthRequest,@Param('role') raw:string,@Body() body:unknown){
+  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);
+  const role=z.enum(managerRoles).parse(raw);
+  const {showPhone}=z.object({showPhone:z.boolean()}).strict().parse(body);
+  return tenantTx(req.context,async tx=>{
+   const tenantId=req.context.tenantId;
+   await tx.directoryPolicy.upsert({where:{tenantId_role:{tenantId,role}},create:{tenantId,role,showPhone},update:{showPhone}});
+   await audit(tx,req.context,'DIRECTORY_POLICY_CHANGED',tenantId,{role,showPhone});
+   return {role,showPhone};
+  });
+ }
  @Get('members') async members(@Req() req:AuthRequest){requireRole(req.context,'ADMIN');return tenantTx(req.context,async tx=>{
   const ms=await tx.membership.findMany({where:{tenantId:req.context.tenantId}});
   const users=await tx.user.findMany({where:{id:{in:ms.map(m=>m.userId)}},select:{id:true,name:true,email:true}});
   return ms.map(m=>({...m,user:users.find(u=>u.id===m.userId)}));
  });}
  @Patch('members/:id') async changeMember(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
-  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:z.enum(['HR','EMPLOYEE','AUDITOR']),active:z.boolean()}).strict().parse(body);
+  requireRole(req.context,'ADMIN');await requireVerifiedSession(req);uuid.parse(id);const d=z.object({role:z.enum(assignableRoles),active:z.boolean()}).strict().parse(body);
   return tenantTx(req.context,async tx=>{
    const m=await tx.membership.findFirst({where:{id,tenantId:req.context.tenantId}});if(!m)throw new NotFoundException();
    if(m.role==='ADMIN' || m.userId===req.userId)throw new BadRequestException('Administrator and self-access changes are not supported.');

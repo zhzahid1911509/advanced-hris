@@ -1,3 +1,7 @@
+# v0.3.0 — Scoped employee directory
+
+Added branch and department manager roles, scoped directory and dashboard queries, MFA-protected private phone access policies and audit events. Includes the v0.2 migration and worker hotfixes.
+
 # v0.2.0 — Account security
 
 Added authenticator enrollment, recovery codes, account attempt limits, session management, MFA for invitation and membership changes, and runtime database diagnostics. See [implementation notes](docs/ACCOUNT-SECURITY.md).

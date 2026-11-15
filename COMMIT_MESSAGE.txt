@@ -1,1 +1,1 @@
-feat(auth): add authenticator MFA, recovery codes, and session management
+feat(access): scope employee directory by branch and department

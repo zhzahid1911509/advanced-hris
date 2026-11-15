@@ -113,6 +113,37 @@ async function main(){
   res=await request('profile-requests/'+selfRequest.json.id+'/decision','POST',{decision:'APPROVED',reason:'HR self approval attempt'},employeeSession);check('HR cannot approve own request',()=>assert.equal(res.status,400));
   await request('members/'+membership.rows[0].id,'PATCH',{role:'AUDITOR',active:true},a);
   res=await request('employees/'+id,'GET',undefined,employeeSession);check('auditor contact fields are masked by API',()=>{assert.equal(res.json.phone,undefined);assert.equal(res.json.emergencyContact,undefined);});
+  const peer=await request('employees','POST',{...employee,employeeNo:'PEER',email:'peer@example.test'},a);
+  const outside=await request('employees','POST',{...employee,employeeNo:'OUT',email:'outside@example.test',branchId:null},a);
+  assert.equal(peer.status,201);assert.equal(outside.status,201);
+  for(const role of ['BRANCH_MANAGER','DEPARTMENT_MANAGER']){
+   assert.equal((await request('members/'+membership.rows[0].id,'PATCH',{role,active:true},a)).status,200);
+   res=await request('employees/'+peer.json.id,'GET',undefined,employeeSession);
+   check(role+' applies assigned unit scope',()=>assert.equal(res.status,role==='BRANCH_MANAGER'?200:404));
+   res=await request('employees/'+outside.json.id,'GET',undefined,employeeSession);
+   check(role+' excludes unrelated records',()=>assert.equal(res.status,404));
+   res=await request('employees/'+id,'GET',undefined,employeeSession);
+   check(role+' hides private contact fields by default',()=>{assert.equal(res.status,200);assert.equal(res.json.phone,undefined);assert.equal(res.json.address,undefined);});
+   res=await request('directory-policies/'+role,'PATCH',{showPhone:true},employeeSession);
+   check(role+' cannot grant itself phone access',()=>assert.equal(res.status,403));
+   assert.equal((await request('directory-policies/'+role,'PATCH',{showPhone:true},a)).status,200);
+   res=await request('employees/'+id,'GET',undefined,employeeSession,second);
+   check(role+' gets configured phone field on other API instance',()=>{assert.equal(typeof res.json.phone,'string');assert.equal(res.json.emergencyContact,undefined);});
+  }
+  const department=await request('units','POST',{name:'Operations',kind:'DEPARTMENT'},a);
+  assert.equal(department.status,201);
+  for(const employeeId of [id,peer.json.id]){
+   const prior=await request('employees/'+employeeId,'GET',undefined,a);
+   const {employeeNo,email,version}=prior.json;
+   const edit=await request('employees/'+employeeId,'PATCH',{...employee,employeeNo,email,version,departmentId:department.json.id,reason:'Assign Operations department'},a);
+   assert.equal(edit.status,200);
+  }
+  res=await request('employees','GET',undefined,employeeSession);
+  check('department manager directory includes assigned peers only',()=>assert.deepEqual(res.json.items.map((e:any)=>e.id).sort(),[id,peer.json.id].sort()));
+  res=await request('dashboard','GET',undefined,employeeSession);
+  check('department dashboard counts only scoped records',()=>assert.equal(res.json.employees,2));
+  res=await request('audit','GET',undefined,employeeSession);
+  check('manager cannot browse workspace audit',()=>assert.equal(res.status,403));
   await request('members/'+membership.rows[0].id,'PATCH',{role:'EMPLOYEE',active:false},a);
   res=await request('employees','GET',undefined,employeeSession);check('suspended membership loses access immediately',()=>assert.equal(res.status,403));
   await request('auth/forgot-password','POST',{email:bEmail});const reset=await getToken(bEmail,'reset');

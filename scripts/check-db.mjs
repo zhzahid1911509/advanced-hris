@@ -11,7 +11,9 @@ try {
   }
   await client.query('SELECT "mfaSecret" FROM users LIMIT 0');
   await client.query('SELECT handle,"factorAt" FROM sessions LIMIT 0');
-  console.log('Runtime role and account-security schema verified.');
+  await client.query('SELECT id FROM public.auth_mail LIMIT 0');
+  await client.query('SELECT "showPhone" FROM public.directory_policies LIMIT 0');
+  console.log('Runtime role, account security, mail queue and directory policies verified.');
 } catch (e) {
   console.error(e.code === '28P01' ? 'Login rejected. Check DATABASE_URL and APP_DB_PASSWORD, then run npm run db:migrate.' :
     e.code === '42703' || e.code === '42P01' ? 'Apply the project migrations with npm run db:migrate.' :
