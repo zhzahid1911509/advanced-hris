@@ -82,8 +82,10 @@ export class AuthController {
  }
  @Get('me') @UseGuards(SessionGuard)
  async me(@Req() req:AuthRequest){
-  const user=await db.user.findUniqueOrThrow({where:{id:req.userId},select:{id:true,name:true,email:true}});
-  const memberships=await db.membership.findMany({where:{userId:req.userId,active:true}});
+  const [user,memberships]=await Promise.all([
+   db.user.findUniqueOrThrow({where:{id:req.userId},select:{id:true,name:true,email:true,photo:true}}),
+   db.membership.findMany({where:{userId:req.userId,active:true}})
+  ]);
   const tenants=await db.tenant.findMany({where:{id:{in:memberships.map(m=>m.tenantId)}}});
   return {user,csrf:req.csrf,organizations:memberships.map(m=>({...tenants.find(t=>t.id===m.tenantId),role:m.role}))};
  }

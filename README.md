@@ -1,8 +1,8 @@
-# Advanced HRIS · v0.7.0
+# Advanced HRIS · v0.8.0
 
 A working foundation release for the Bangladesh-focused Advanced HRIS project. Next.js web app, NestJS API, PostgreSQL/Prisma and Redis/BullMQ worker. Source code, migrations, tests and documentation are included. There are no default accounts or mock production records.
 
-This release adds [private employee PDFs](docs/EMPLOYEE-DOCUMENTS.md) and includes [temporary directory delegation](docs/DIRECTORY-DELEGATION.md) and includes [custom directory roles](docs/CUSTOM-DIRECTORY-ROLES.md) and includes [direct-report teams](docs/DIRECT-REPORTS.md) and includes [scoped employee directory access](docs/SCOPED-DIRECTORY.md) and includes [account security](docs/ACCOUNT-SECURITY.md) to the [v0.1 foundation](docs/FEATURE-IMPLEMENTATION.md). See the [remaining implementation plan](docs/NEXT-IMPLEMENTATION.md).
+This release adds [profile photos, password visibility, PDF previews and loading improvements](docs/PROFILE-AND-PREVIEW.md) and includes [private employee PDFs](docs/EMPLOYEE-DOCUMENTS.md) and includes [temporary directory delegation](docs/DIRECTORY-DELEGATION.md) and includes [custom directory roles](docs/CUSTOM-DIRECTORY-ROLES.md) and includes [direct-report teams](docs/DIRECT-REPORTS.md) and includes [scoped employee directory access](docs/SCOPED-DIRECTORY.md) and includes [account security](docs/ACCOUNT-SECURITY.md) to the [v0.1 foundation](docs/FEATURE-IMPLEMENTATION.md). See the [remaining implementation plan](docs/NEXT-IMPLEMENTATION.md).
 
 ## Quick start — Windows, macOS and Linux
 

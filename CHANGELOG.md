@@ -1,3 +1,7 @@
+# v0.8.0 — Profile and document experience
+
+Added password visibility, private PDF previews and account/workspace thumbnails. Reduced redundant requests and added document processing feedback.
+
 # v0.7.0 — Private employee documents
 
 Added PDF uploads with private quarantine, ClamAV decisions, S3-compatible storage, version history and authorized attachment downloads.

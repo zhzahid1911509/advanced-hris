@@ -48,16 +48,17 @@ export class PeopleController {
  }
  @Get('employees/:id') async employee(@Req() req:AuthRequest,@Param('id') id:string){uuid.parse(id);return tenantTx(req.context,async tx=>{
   const e=await ownEmployee(tx,req.context,id);
+  const linked=e.userId?await tx.user.findUnique({where:{id:e.userId},select:{photo:true}}):null;
   const manager=req.context.role==='ADMIN' && e.managerId
    ? await tx.employee.findFirst({where:{id:e.managerId,tenantId:req.context.tenantId},select:{employeeNo:true,name:true}})
    : null;
-  const timeline=await tx.employeeEvent.findMany({where:{employeeId:id},orderBy:{createdAt:'desc'},take:50});
   // Auditors can inspect events and employment metadata but not private contact fields.
   if (isManager(req.context.role)) {
    const policy=req.context.directoryRole ?? await tx.directoryPolicy.findUnique({where:{tenantId_role:{tenantId:req.context.tenantId,role:req.context.role}}});
-   return {...e,managerId:undefined,address:undefined,emergencyContact:undefined,phone:policy?.showPhone?e.phone:undefined,timeline:[]};
+   return {...e,photo:linked?.photo,managerId:undefined,address:undefined,emergencyContact:undefined,phone:policy?.showPhone?e.phone:undefined,timeline:[]};
   }
-  return {...e,manager,managerId:undefined,...(req.context.role==='AUDITOR'?{phone:undefined,address:undefined,emergencyContact:undefined}:{}),timeline};
+  const timeline=await tx.employeeEvent.findMany({where:{employeeId:id},orderBy:{createdAt:'desc'},take:50});
+  return {...e,photo:linked?.photo,manager,managerId:undefined,...(req.context.role==='AUDITOR'?{phone:undefined,address:undefined,emergencyContact:undefined}:{}),timeline};
  });}
  @Post('employees') async create(@Req() req:AuthRequest,@Body() body:unknown){
   requireRole(req.context,'ADMIN','HR');const d=employeeInput.parse(body);

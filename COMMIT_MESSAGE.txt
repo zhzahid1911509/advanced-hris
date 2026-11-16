@@ -1,1 +1,1 @@
-feat(documents): add private employee PDFs with quarantine and signed downloads
+feat(web): add profile photos, password visibility and private PDF previews; streamline loading

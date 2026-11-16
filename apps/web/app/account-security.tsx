@@ -1,4 +1,5 @@
 'use client';
+import {PasswordInput} from './profile-controls';
 import { useEffect, useState, type FormEvent } from 'react';
 
 type Session = {handle:string;agent:string;current:boolean;createdAt:string;expiresAt:string};
@@ -50,7 +51,7 @@ export function AccountSecurity({api}:{api:Client}) {
     {status && <><p>{status.enabled?'Authenticator enabled · '+status.recoveryRemaining+' recovery codes remaining.':'Set up an authenticator to protect sign-in. Administrators need it to invite people or change access.'}</p>
       <form key={status.enabled?'enabled':key?'confirm':'start'} onSubmit={e=>submit(e,status.enabled?'disable':key?'confirm':'enroll')}>
         {key && <><p>In your authenticator app, add a time-based entry named Advanced HRIS. Enter this setup key, then enter the six-digit code below.</p><p><code>{key}</code></p></>}
-        {!key && <label className="field"><span>Current password</span><input type="password" name="password" required autoComplete="current-password"/></label>}
+        {!key && <label className="field"><span>Current password</span><PasswordInput name="password" required autoComplete="current-password"/></label>}
         {(key || status.enabled) && <label className="field"><span>{key?'Authenticator code':'Authenticator or recovery code'}</span><input name="code" required maxLength={48} autoComplete="one-time-code"/></label>}
         <button disabled={busy} className="button secondary">{status.enabled?'Disable authenticator':key?'Confirm enrollment':'Set up authenticator'}</button>
       </form>

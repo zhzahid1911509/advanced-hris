@@ -39,8 +39,8 @@ export async function storeClean(key:string,data:Buffer){
   try{await client.send(new PutObjectCommand({Bucket,Key:key,Body:data,ContentType:'application/pdf',ContentDisposition:'attachment'}));}
   finally{client.destroy();}
 }
-export async function downloadLink(key:string,name:string){
+export async function downloadLink(key:string,name:string,disposition:'attachment'|'inline'='attachment'){
   const {client,Bucket}=storage();
-  try{return await getSignedUrl(client,new GetObjectCommand({Bucket,Key:key,ResponseContentDisposition:'attachment; filename="employee-document.pdf"; filename*=UTF-8\'\''+encodeURIComponent(name)}),{expiresIn:60});}
+  try{return await getSignedUrl(client,new GetObjectCommand({Bucket,Key:key,ResponseContentDisposition:disposition+'; filename="employee-document.pdf"; filename*=UTF-8\'\''+encodeURIComponent(name)}),{expiresIn:60});}
   finally{client.destroy();}
 }

@@ -6,6 +6,7 @@ datasource db {
   url = env("DATABASE_URL")
 }
 model Tenant {
+  photo String?
   id String @id @default(uuid()) @db.Uuid
   name String
   slug String @unique
@@ -14,6 +15,7 @@ model Tenant {
   @@map("tenants")
 }
 model User {
+  photo String?
   id String @id @default(uuid()) @db.Uuid
   email String @unique
   name String

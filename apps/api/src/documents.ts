@@ -89,6 +89,12 @@ export class DocumentController{
   });
  }
  @Post(':id/download') download(@Req() req:AuthRequest,@Param('employeeId') employeeId:string,@Param('id') id:string){
+  return this.issueLink(req,employeeId,id,'attachment');
+ }
+ @Post(':id/preview') preview(@Req() req:AuthRequest,@Param('employeeId') employeeId:string,@Param('id') id:string){
+  return this.issueLink(req,employeeId,id,'inline');
+ }
+ private issueLink(req:AuthRequest,employeeId:string,id:string,disposition:'inline'|'attachment'){
   z.string().uuid().parse(employeeId);z.string().uuid().parse(id);
   const c=req.context;
   return tenantTx(c,async tx=>{
@@ -96,8 +102,8 @@ export class DocumentController{
    const doc=await tx.employeeDocument.findFirst({where:{id,employeeId,tenantId:c.tenantId},select:{name:true,status:true}});
    if(!doc)throw new NotFoundException();
    if(doc.status!=='READY')throw new ForbiddenException('This file has not been released.');
-   const url=await downloadLink(keyFor(c.tenantId,employeeId,id),doc.name);
-   await audit(tx,c,'DOCUMENT_DOWNLOAD_ISSUED',id,{employeeId});
+   const url=await downloadLink(keyFor(c.tenantId,employeeId,id),doc.name,disposition);
+   await audit(tx,c,disposition==='inline'?'DOCUMENT_PREVIEW_ISSUED':'DOCUMENT_DOWNLOAD_ISSUED',id,{employeeId});
    return {url};
   });
  }
