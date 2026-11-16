@@ -130,6 +130,12 @@ model EmployeeEvent {
   @@map("employee_events")
 }
 model ProfileRequest {
+  workflowVersion Int @default(1)
+  reviewMode String @default("EITHER")
+  eligibility Json?
+  reviews Json @default("[]")
+  revision Int @default(0)
+  previousId String? @unique @db.Uuid
   id String @id @default(uuid()) @db.Uuid
   tenantId String @db.Uuid
   employeeId String @db.Uuid
@@ -225,4 +231,13 @@ model EmployeeDocument {
   createdAt DateTime @default(now()) @db.Timestamptz
   @@unique([tenantId,employeeId,name,version])
   @@map("employee_documents")
+}
+
+model ProfileWorkflow {
+ tenantId String @db.Uuid
+ version Int
+ mode String
+ publishedAt DateTime @default(now()) @db.Timestamptz
+ @@id([tenantId,version])
+ @@map("profile_workflows")
 }

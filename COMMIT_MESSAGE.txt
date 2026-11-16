@@ -1,1 +1,1 @@
-feat(web): add profile photos, password visibility and private PDF previews; streamline loading
+feat(approvals): version contact-change workflows and enforce independent reviews

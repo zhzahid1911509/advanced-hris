@@ -15,7 +15,8 @@ try {
   await client.query('SELECT "showPhone" FROM public.directory_policies LIMIT 0');
   await client.query('SELECT id FROM public.directory_delegations LIMIT 0');
   await client.query('SELECT id FROM public.employee_documents LIMIT 0');
-  console.log('Runtime role, employee documents, delegations, account security, mail queue and directory policies verified.');
+  await client.query('SELECT version FROM public.profile_workflows LIMIT 0');
+  console.log('Runtime role, profile workflows, employee documents, delegations, account security, mail queue and directory policies verified.');
 } catch (e) {
   console.error(e.code === '28P01' ? 'Login rejected. Check DATABASE_URL and APP_DB_PASSWORD, then run npm run db:migrate.' :
     e.code === '42703' || e.code === '42P01' ? 'Apply the project migrations with npm run db:migrate.' :

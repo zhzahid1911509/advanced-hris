@@ -1,8 +1,9 @@
+import {WorkflowController,currentPolicy,neededRoles,validateStaff,type Candidate,type Review} from './profile-workflows';
 import { DelegationController } from './delegations';
 import { CustomRoleController, resolveSelection, roleSelection } from './custom-roles';
 import { assignableRoles, managerRoles, isManager, employeeScope } from './directory-access';
 import { requireVerifiedSession } from './account-security';
-import { Body, Controller, Get, Post, Patch, Param, Query, Req, UseGuards, Module, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Post, Patch, Param, Query, Req, UseGuards, Module, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { tenantTx, audit, event, notify, Tx, Context } from './db';
@@ -130,29 +131,62 @@ export class PeopleController {
   });
  }
  @Post('profile-requests') async request(@Req() req:AuthRequest,@Body() body:unknown){
-  const d=z.object({employeeId:uuid,version:z.number().int().positive(),changes:profileInput}).strict().parse(body);
+  const d=z.object({employeeId:uuid,version:z.number().int().positive(),changes:profileInput,previousId:uuid.optional()}).strict().parse(body);
   return tenantTx(req.context,async tx=>{
    const e=await tx.employee.findFirst({where:{id:d.employeeId,userId:req.userId}});if(!e)throw new NotFoundException('Your linked employee record was not found.');
    if(e.version!==d.version)throw new ConflictException('Refresh your profile before submitting.');
-   const r=await tx.profileRequest.create({data:{tenantId:req.context.tenantId,employeeId:e.id,requesterId:req.userId,baseVersion:e.version,changes:d.changes}});
-   await audit(tx,req.context,'PROFILE_CHANGE_REQUESTED',r.id,{fields:Object.keys(d.changes)});
-   const reviewers=await tx.membership.findMany({where:{tenantId:req.context.tenantId,role:{in:['ADMIN','HR']},active:true}});
-   for(const reviewer of reviewers) await notify(tx,req.context,reviewer.userId,`A profile change for ${e.name} needs review.`);
-   return r;
+   const tenantId=req.context.tenantId;
+   if(d.previousId && !await tx.profileRequest.findFirst({where:{id:d.previousId,tenantId,employeeId:e.id,requesterId:req.userId,state:{in:['REJECTED','WITHDRAWN']}}}))
+    throw new BadRequestException('Choose your rejected or withdrawn request for this employee.');
+   const policy=await currentPolicy(tx,tenantId);
+   const reviewers=await tx.membership.findMany({where:{tenantId,active:true,role:{in:['ADMIN','HR']},userId:{not:req.userId}},select:{userId:true,role:true}});
+   const route=policy.mode==='EMERGENCY_CHANGE'?(d.changes.emergencyContact!==e.emergencyContact?'HR_THEN_ADMIN':'EITHER'):policy.mode;
+   validateStaff(route,reviewers);
+   const r=await tx.profileRequest.create({data:{tenantId,employeeId:e.id,requesterId:req.userId,baseVersion:e.version,changes:d.changes,
+    previousId:d.previousId,workflowVersion:policy.version,reviewMode:route,eligibility:reviewers}});
+   await audit(tx,req.context,'PROFILE_CHANGE_REQUESTED',r.id,{fields:Object.keys(d.changes),workflowVersion:policy.version});
+   for(const reviewer of reviewers.filter(c=>neededRoles(route,[]).includes(c.role)))await notify(tx,req.context,reviewer.userId,`A profile change for ${e.name} needs review.`);
+   return {...r,eligibility:undefined};
   });
  }
  @Get('profile-requests') async requests(@Req() req:AuthRequest){return tenantTx(req.context,async tx=>{
   const requests=await tx.profileRequest.findMany({where:(req.context.role==='EMPLOYEE'||isManager(req.context.role))?{requesterId:req.userId}:{},orderBy:{createdAt:'desc'},take:100});
   const employees=await tx.employee.findMany({where:{id:{in:requests.map(r=>r.employeeId)}},select:{id:true,name:true}});
-  return requests.map(r=>({...r,employeeName:employees.find(e=>e.id===r.employeeId)?.name,...(req.context.role==='AUDITOR'?{changes:undefined}:{})}));
+  return requests.map(r=>({...r,eligibility:undefined,canReview:r.state==='PENDING' && r.requesterId!==req.userId &&
+   neededRoles(r.reviewMode,r.reviews as Review[]).includes(req.context.role) &&
+   !(r.reviews as Review[]).some(v=>v.userId===req.userId) &&
+   (!r.eligibility || (r.eligibility as Candidate[]).some(m=>m.userId===req.userId&&m.role===req.context.role)),employeeName:employees.find(e=>e.id===r.employeeId)?.name,...(req.context.role==='AUDITOR'?{changes:undefined}:{})}));
  });}
+ @Post('profile-requests/:id/withdraw') async withdraw(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
+  uuid.parse(id);
+  const {revision}=z.object({revision:z.number().int().nonnegative()}).strict().parse(body);
+  return tenantTx(req.context,async tx=>{
+   const changed=await tx.profileRequest.updateMany({where:{id,tenantId:req.context.tenantId,requesterId:req.userId,state:'PENDING',revision},data:{state:'WITHDRAWN',revision:{increment:1},reviewedAt:new Date()}});
+   if(!changed.count)throw new ConflictException('Request unavailable or changed. Refresh before withdrawing.');
+   await audit(tx,req.context,'PROFILE_WITHDRAWN',id,{});
+   return {message:'Request withdrawn.'};
+  });
+ }
  @Post('profile-requests/:id/decision') async decision(@Req() req:AuthRequest,@Param('id') id:string,@Body() body:unknown){
-  requireRole(req.context,'ADMIN','HR');uuid.parse(id);const d=z.object({decision:z.enum(['APPROVED','REJECTED']),reason:z.string().trim().min(5).max(300)}).strict().parse(body);
+  requireRole(req.context,'ADMIN','HR');uuid.parse(id);const d=z.object({decision:z.enum(['APPROVED','REJECTED']),reason:z.string().trim().min(5).max(300),revision:z.number().int().nonnegative().optional()}).strict().parse(body);
   return tenantTx(req.context,async tx=>{
    const r=await tx.profileRequest.findUnique({where:{id}});if(!r)throw new NotFoundException();
    if(r.requesterId===req.userId)throw new BadRequestException('You cannot approve or reject your own request.');
-   const locked=await tx.profileRequest.updateMany({where:{id,state:'PENDING'},data:{state:d.decision,reason:d.reason,reviewerId:req.userId,reviewedAt:new Date()}});
-   if(locked.count!==1)throw new ConflictException('This request has already been reviewed.');
+   if(r.state!=='PENDING'||(d.revision!==undefined&&r.revision!==d.revision))throw new ConflictException('Refresh the request before reviewing.');
+   const prior=r.reviews as Review[];
+   const eligible=r.eligibility as Candidate[]|null;
+   if(prior.some(v=>v.userId===req.userId)||!neededRoles(r.reviewMode,prior).includes(req.context.role) ||
+     (eligible&&!eligible.some(v=>v.userId===req.userId&&v.role===req.context.role)))throw new ForbiddenException('You are not eligible for this review step.');
+   const reviews=[...prior,{userId:req.userId,role:req.context.role,decision:d.decision,reason:d.reason,at:new Date().toISOString()}];
+   const terminal=d.decision==='REJECTED'||r.reviewMode==='EITHER'||neededRoles(r.reviewMode,reviews).length===0;
+   const locked=await tx.profileRequest.updateMany({where:{id,state:'PENDING',revision:r.revision},data:{reviews,revision:{increment:1},...(terminal?{state:d.decision,reason:d.reason,reviewerId:req.userId,reviewedAt:new Date()}:{})}});
+   if(!locked.count)throw new ConflictException('Another reviewer acted. Refresh and try again.');
+   if(!terminal){
+    await audit(tx,req.context,'PROFILE_STEP_APPROVED',id,{role:req.context.role,workflowVersion:r.workflowVersion});
+    for(const c of eligible??[])if(r.reviewMode==='HR_THEN_ADMIN'&&neededRoles(r.reviewMode,reviews).includes(c.role)&&!reviews.some(v=>v.userId===c.userId))
+      await notify(tx,req.context,c.userId,'A profile change is waiting for your review.');
+    return {message:'Step recorded. Further review required.'};
+   }
    if(d.decision==='APPROVED'){
     const changes=profileInput.parse(r.changes);
     const changed=await tx.employee.updateMany({where:{id:r.employeeId,version:r.baseVersion},data:{...changes,version:{increment:1}}});
@@ -200,4 +234,4 @@ export class PeopleController {
   });
  }
 }
-@Module({controllers:[PeopleController,CustomRoleController,DelegationController]}) export class PeopleModule {}
+@Module({controllers:[WorkflowController,PeopleController,CustomRoleController,DelegationController]}) export class PeopleModule {}

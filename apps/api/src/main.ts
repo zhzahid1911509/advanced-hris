@@ -36,7 +36,7 @@ class Errors implements ExceptionFilter {
  }
 }
 @Controller('health') class HealthController {
- @Get() async health(){await db.$queryRaw`SELECT 1`;return {status:'ok',version:'0.8.0'};}
+ @Get() async health(){await db.$queryRaw`SELECT 1`;return {status:'ok',version:'0.9.0'};}
 }
 @Module({imports:[AuthModule,PeopleModule,AccountModule,DocumentModule,PhotoModule],controllers:[HealthController]}) class AppModule {}
 async function main(){
@@ -62,7 +62,7 @@ async function main(){
  app.use('/api/v1/photos',json({limit:'3mb'}));
  app.use(json());
  app.useGlobalFilters(new Errors());
- const swagger=SwaggerModule.createDocument(app,new DocumentBuilder().setTitle('Advanced HRIS API').setVersion('0.8.0').addCookieAuth('hris_session').addApiKey({type:'apiKey',in:'header',name:'x-tenant-id'},'tenant').build());
+ const swagger=SwaggerModule.createDocument(app,new DocumentBuilder().setTitle('Advanced HRIS API').setVersion('0.9.0').addCookieAuth('hris_session').addApiKey({type:'apiKey',in:'header',name:'x-tenant-id'},'tenant').build());
  SwaggerModule.setup('api/docs',app,swagger);
  const role=await db.$queryRaw<Array<{rolsuper:boolean;rolbypassrls:boolean}>>`SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user`;
  if(role[0]?.rolsuper || role[0]?.rolbypassrls)throw new Error('Refusing to run API with privileged database credentials. Use hris_app.');

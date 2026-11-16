@@ -1,3 +1,7 @@
+# v0.9.0 — Versioned contact-change approvals
+
+Added per-workspace workflow versions, conditional and dual reviews, withdrawal and linked resubmission.
+
 # v0.8.0 — Profile and document experience
 
 Added password visibility, private PDF previews and account/workspace thumbnails. Reduced redundant requests and added document processing feedback.
